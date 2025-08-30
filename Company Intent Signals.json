@@ -1,0 +1,261 @@
+{
+  "name": "Company Intent Signals",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        32,
+        -208
+      ],
+      "id": "c66d8a2f-2cb9-4c29-a054-701aa19ee7d6",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "companies",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        320,
+        -208
+      ],
+      "id": "a92ff986-1f09-4ef5-9d49-357a443e892d",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"companies\": [\n    \"Bosch\",\n    \"Siemens\",\n    \"ABB\",\n    \"Schneider Electric\",\n    \"Rockwell Automation\",\n    \"Honeywell\",\n    \"Emerson\",\n    \"GE Vernova\",\n    \"Fanuc\",\n    \"KUKA\",\n    \"Yaskawa\",\n    \"Mitsubishi Electric\",\n    \"Danfoss\",\n    \"SKF\",\n    \"ThyssenKrupp\",\n    \"Valeo\",\n    \"Magna\",\n    \"Continental\",\n    \"TRUMPF\",\n    \"DMG Mori\"\n  ]\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        176,
+        -208
+      ],
+      "id": "9341f443-97e7-47e1-8c9c-29ae95a3e0a9",
+      "name": "companies"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://news.google.com/rss/search?q=' + encodeURIComponent($json.company + ' manufacturing when:7d') + '&hl=en&gl=US&ceid=US:en' }}",
+        "options": {
+          "customFields": "={{ $json.company }}"
+        }
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        688,
+        -208
+      ],
+      "id": "3e786a77-0b2f-4d5e-9635-b457506caf9b",
+      "name": "RSS Read",
+      "alwaysOutputData": false,
+      "executeOnce": false,
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// --- COMPANY TESPİTİ ---\nconst CANDS = [\n  'Bosch','Siemens','ABB','Schneider Electric','Rockwell Automation','Honeywell','Emerson',\n  'GE Vernova','Fanuc','KUKA','Yaskawa','Mitsubishi Electric','Danfoss','SKF',\n  'ThyssenKrupp','Valeo','Magna','Continental','TRUMPF','DMG Mori'\n];\n\nfunction esc(s){ return s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'); }\nconst hay = (String($json.title||'') + ' ' + String($json.contentSnippet || $json.content || '')).toLowerCase();\n\nlet detected = null;\nfor (const c of CANDS) {\n  const re = new RegExp(`\\\\b${esc(c.toLowerCase())}\\\\b`);\n  if (re.test(hay)) { detected = c; break; }\n}\n\n// varsa inputtan al, yoksa tahmin, o da yoksa 'Unknown'\nconst company = $json.company || detected || 'Unknown';\n\n// --- DEVAM: SİNYAL / SKOR HESABI (senin kodun) ---\nconst title = String($json.title || '').toLowerCase();\nconst desc  = String($json.contentSnippet || $json.content || '').toLowerCase();\nconst text  = `${title} ${desc}`;\n\nconst signals = [\n  { type:'hiring',         score:1, kw:['hiring','recruit','vacanc','career','stellen'] },\n  { type:'product_launch', score:3, kw:['launch','unveil','introduc','release','new product'] },\n  { type:'partnership',    score:3, kw:['partner','partnership','collaborat','alliance','mou'] },\n  { type:'capacity',       score:2, kw:['factory','plant','manufactur','expand','opens','capacity','production line','line expansion'] },\n  { type:'event',          score:2, kw:['expo','fair','conference','summit','booth','showcase','exhibition','trade show','tradeshow'] },\n  { type:'mna',            score:3, kw:['acquire','acquisition','merger','buyout','takeover'] },\n  { type:'automation',     score:1, kw:['automation','industrial automation','robotics','cobot','plc','mes','scada'] },\n];\n\nlet total = 0, kinds = [];\nfor (const s of signals) if (s.kw.some(k => text.includes(k))) { total += s.score; kinds.push(s.type); }\n\nconst publishedISO = $json.pubDate\n  ? new Date($json.pubDate).toISOString()\n  : ($json.isoDate ? new Date($json.isoDate).toISOString() : null);\n\nconst url = $json.link || $json.guid || '';\n\nreturn {\n  json: {\n    company,                                    // 🔥 artık boş değil\n    signal_type: kinds.length ? kinds.join(',') : 'none',\n    title: $json.title || '',\n    url,\n    published_at: publishedISO,\n    source: 'GoogleNewsRSS',\n    score: total,\n    raw: $json\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -208
+      ],
+      "id": "46fa83ad-5fd8-47ac-a375-d6fdcdb80618",
+      "name": "Tag & Score"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a8580751-766c-44f9-ab7a-5ed2eeff9dbc",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1056,
+        -208
+      ],
+      "id": "7a881b4d-7b88-493b-b005-a0b61cdb24c7",
+      "name": "score > 0"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "python",
+        "pythonCode": "return {\"json\": {\"company\": _input.item.json[\"companies\"]}}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        -208
+      ],
+      "id": "a72b6408-ade6-45e3-93cd-71d20663ed7f",
+      "name": "companies_to_company"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dqtbcogicrgxkfufkmvz.supabase.co/rest/v1/company_intent?on_conflict=url",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ [{\n  company:      $json.company || 'Unknown',\n  signal_type:  $json.signal_type || null,\n  title:        $json.title || null,\n  url:          $json.url,\n  published_at: $json.published_at || null,\n  source:       $json.source || 'GoogleNewsRSS',\n  score:        $json.score || 0,\n  raw:          $json.raw || {}\n}] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        -368
+      ],
+      "id": "1583c2a7-b3c7-4ce7-b605-09ff8c466017",
+      "name": "HTTP Request",
+      "credentials": {
+        "supabaseApi": {
+          "id": "vjllcfcHL6JNjDbt",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "companies": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "companies_to_company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Read": {
+      "main": [
+        [
+          {
+            "node": "Tag & Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag & Score": {
+      "main": [
+        [
+          {
+            "node": "score > 0",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "score > 0": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "companies_to_company": {
+      "main": [
+        [
+          {
+            "node": "RSS Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "23002628-51ad-440b-9782-d3c134c3e8b1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5658d02809aa5e2b2c3ad6efe72090aa65b684135043a10be77aab28c84e794e"
+  },
+  "id": "H4DiQpBTFhkVUSYE",
+  "tags": []
+}
